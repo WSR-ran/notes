@@ -1,0 +1,43 @@
+body {
+    font: 14px/1.2 "微软雅黑"
+}
+.m-note {
+    position: absolute;
+    width: 200px;
+    height: 300px;
+    padding: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, .5);
+    background: #f18abe;
+}
+.m-note .close {
+    display: none;
+    position: absolute;
+    top: -15px;
+    left: -15px;
+    width: 30px;
+    height: 30px;
+    background: url(close.png) no-repeat;
+}
+.m-note:hover .close {
+    display: block;
+}
+.m-note .time-box {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 30px;
+    line-height: 30px;
+    color: #fff;
+    padding-left: 10px;
+    border-top: 1px solid #fff;
+}
+.m-note .editor {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    bottom: 40px;
+    left: 20px;
+    outline: none;
+    overflow: auto;
+}
