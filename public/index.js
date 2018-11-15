@@ -1,6 +1,5 @@
 let app = {
-    util: {},
-    store: {}
+    util: {}
 };
 
 //工具模块
@@ -11,39 +10,41 @@ app.util = {
     formatTime: (ms) => {
         const date = new Date(ms);
         return `${date.getFullYear()}-${(date.getMonth() +1).toString().padStart(2,'0')}-${(date.getDate()).toString().padStart(2,'0')} ${(date.getHours()).toString().padStart(2,'0')}:${(date.getMinutes()).toString().padStart(2,'0')}:${(date.getSeconds()).toString().padStart(2,'0')}`
-    }
-}
-
-//存储模块
-app.store = {
-    store_key: 'note',
-    get: function (id) {
-        let notes = this.getNotes();
-        return notes[id] || {}
     },
-    set: function (id, content) {
-        let notes = this.getNotes();
-        if (notes[id]) {
-            Object.assign(notes[id], content);
-        } else {
-            notes[id] = content;
+    ajax: function (method, url, data, callback) {
+        let xhr = new XMLHttpRequest();
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if ((xhr.status >= 200 && xhr.status < 300) || xhr.status == 304) {
+                    callback(xhr.responseText);
+                }else {
+                    console.error('Request was unsuccessful:' + xhr.status);
+                }
+            }
         }
-        localStorage[this.store_key] = JSON.stringify(notes);
+        if (method == 'get') {
+            xhr.open(method, data ? `${url}?${data}` : url);
+            xhr.send();
+        } else {
+            xhr.open(method, url);
+            xhr.setRequestHeader("Content-type","application/x-www-form-urlencoded");
+            if (data) {
+                xhr.send(typeof(data) == 'string'? data : this.serialize(data));
+            } else {
+                xhr.send()
+            }
+        }
     },
-    remove: function (id) {
-        let notes = this.getNotes();
-        delete notes[id];
-        localStorage[this.store_key] = JSON.stringify(notes);
-    },
-    removeAll: function (){
-        localStorage.removeItem(this.store_key);
-    },
-    getNotes: function () {
-        return JSON.parse( localStorage[this.store_key] || '{}');
+    serialize: function (data) {
+        var arr = [];
+        for(var i in data) {
+            arr.push(encodeURIComponent(i) + "=" + encodeURIComponent(data[i]));
+        }
+        return arr.join("&");
     }
 };
 
-(function (util, store) {
+(function (util) {
     const $ = util.$;
     let maxZIndex = 0;
     let movedNote = null;
@@ -60,7 +61,7 @@ app.store = {
         let note = document.createElement('div');
         note.className = 'm-note';
         note.innerHTML = noteTpl;
-        note.id = obj.id || 'm-note-' + Date.now();
+        note.id = obj.id || 'm-note-' + obj.createTime;
         note.style.top = obj.top + 'px';
         note.style.left = obj.left + 'px';
         note.style.zIndex = obj.zIndex;
@@ -83,9 +84,14 @@ app.store = {
         const closeBtn = $('.close', this.note);
         let closeHandler =  function (e) {
             document.body.removeChild(this.note);
-            store.remove(this.note.id);
+            util.ajax('post', '/deletenote', 'id='+this.note.id, function (res) {
+                if (res) {
+                    console.log('删除成功');
+                }
+            })
             closeBtn.removeEventListener('click', closeHandler);
             this.note.removeEventListener('mousedown', mouseDownHandler);
+            $('.editor', this.note).removeEventListener('blur', editorHandler);
         }.bind(this);  
         closeBtn.addEventListener('click', closeHandler);
 
@@ -96,8 +102,14 @@ app.store = {
             startY = e.clientY - this.offsetTop;
             if (parseInt(this.style.zIndex) !== maxZIndex-1) {
                 this.style.zIndex = maxZIndex++;
-                store.set(this.id,{
+                let notedata = {
+                    id: this.id,
                     zIndex: parseInt(this.style.zIndex)
+                };
+                util.ajax('post', '/changenote', notedata, function (res) {
+                    if (res) {
+                        console.log('修改成功');
+                    }
                 })
             }
         }
@@ -105,40 +117,74 @@ app.store = {
 
         // 便签的输入事件
         const editor = $('.editor', this.note);
-        let inputTimer;
+        let beforeContent = "";
         let editorHandler = function (e) {
             let content = editor.innerHTML;
-            clearTimeout(inputTimer);
-            inputTimer = setTimeout(function(){
-                let time = Date.now();
-                store.set(this.note.id, {
-                    content: content,
-                    createTime: time
-                });
-                this.createTime(time);
-            }.bind(this),2000)
+            if (content == beforeContent) return;
+            this.createTime(Date.now());
+            let notedata = {
+                id: this.note.id,
+                content: content,
+                createTime: Date.now()
+            }
+            console.log(notedata);
+            
+            util.ajax('post', '/changenote', notedata, function (res) {
+                if (res) {
+                    console.log('修改成功');
+                } else {
+                    console.log('err');
+                    
+                }
+            })
         }.bind(this);
-        editor.addEventListener('input', editorHandler);
+        editor.addEventListener('blur', editorHandler);
+        editor.addEventListener('focus', function(e){
+            beforeContent = editor.innerHTML;
+        });
     }
     Note.prototype.save = function () {
-        store.set(this.note.id, {
+        let notedata = {
+            id: 'm-note-' + this.createTimeMs,
             left: this.note.offsetLeft,
             top: this.note.offsetTop,
             zIndex: parseInt(this.note.style.zIndex),
             content: $('.editor', this.note).innerHTML,
-            createTime: this.createTimeMs,
-            bgColor: this.note.style.backgroundColor
+            bgColor: this.note.style.backgroundColor,
+            createTime: this.createTimeMs
+        }
+        util.ajax('post', '/addnote', notedata, function (res) {
+            if (res) {
+                console.log('添加成功');
+            }
         })
     }
-
-
     document.addEventListener('DOMContentLoaded', (e) => {
-        //删除
+        //初始化数据
+        util.ajax('get', '/notes', '', function (res) {
+            console.log(JSON.parse(res));
+            JSON.parse(res).forEach((item) => {
+                if (maxZIndex < item.zIndex) {
+                    maxZIndex = item.zIndex;
+                }
+                new Note(item);
+            });
+            maxZIndex += 1;
+        })
+        //清空
         $('#del').addEventListener('click', (e) => {
-            store.removeAll();
             let notes = document.querySelectorAll('.m-note');
+            let arrId= [];            
             notes.forEach((item) => {
-                document.body.removeChild(item)
+                arrId.push(item.id);
+                // document.body.removeChild(item)
+                item.remove();
+                item = null; //该dom对象的引用数变为0，gc会适时回收该dom对象上的所有event listener
+            })
+            util.ajax('post', '/deleteallnotes', 'id='+JSON.stringify(arrId), function (res) {
+                if (res) {
+                    console.log('清空');
+                }
             })
             maxZIndex = 0;
         })
@@ -148,7 +194,8 @@ app.store = {
                 left: Math.round(Math.random() * (window.innerWidth - 220)),
                 top: Math.round(Math.random() * (window.innerHeight - 320)),
                 zIndex: maxZIndex++,
-                bgColor: bgColor[parseInt(Math.random()*(bgColor.length - 1))]
+                bgColor: bgColor[parseInt(Math.random()*(bgColor.length - 1))],
+                createTime: Date.now()
             }).save();
         })
         //移动监听事件
@@ -162,31 +209,24 @@ app.store = {
             top = top < 0 ? top = 0 : top > (window.innerHeight - 320) ? top = (window.innerHeight - 320) : top;
             movedNote.style.left = left + 'px';
             movedNote.style.top = top + 'px';
-            store.set(movedNote.id, {
-                left: left,
-                top: top
-            })
         }
         let mouseupHandler = (e) => {
             if (!movedNote) {
                 return;
             }
+            let notedata = {
+                id: movedNote.id,
+                left: parseInt(movedNote.style.left),
+                top: parseInt(movedNote.style.top)
+            };
+            util.ajax('post', '/changenote', notedata, function (res) {
+                if (res) {
+                    console.log('修改成功');
+                }
+            })
             movedNote = null;
         }
         document.addEventListener('mousemove', mousemoveHandler);
         document.addEventListener('mouseup', mouseupHandler);
-
-        //初始化（从缓存获取）
-        let notes = store.getNotes();
-        Object.keys(notes).forEach((noteId) => {
-            const obj = notes[noteId];
-            if (maxZIndex < obj.zIndex) {
-                maxZIndex = obj.zIndex;
-            }
-            new Note(Object.assign(obj, {
-                id: noteId
-            }));
-        });
-        maxZIndex += 1;
     })
-})(app.util, app.store)
+})(app.util)

@@ -14,8 +14,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "body-parser": "^1.18.3",
+    "express": "^4.16.4",
     "gulp": "^3.9.1",
     "gulp-connect": "^5.6.1",
-    "gulp-open": "^3.0.1"
+    "gulp-open": "^3.0.1",
+    "mongoose": "^5.3.12"
   }
 }
