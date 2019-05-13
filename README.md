@@ -5,6 +5,7 @@
 - node + mongoodb 配置服务器(dev分支)
 ## 使用
 - npm install
+- gulp
 - 打开页面http://localhost:5000/public/index.html
 ## 简单介绍
 ### 模块化思想
